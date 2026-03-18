@@ -1138,8 +1138,6 @@ class UiTweaksPlugin(BasePlugin):
         self.hook_link_confirmation_ref = None
         self.hook_disable_topic_swipe_ref = None
         self.hook_select_all_media_ref = None
-        self.hook_account_visibility_drawer_ref = None
-        self.hook_account_visibility_profile_ref = None
         self.hook_fill_action_mode_menu_ref = None
         self.hook_perform_menu_action_ref = None
         self.hook_message_preview_view_ref = None
@@ -2264,8 +2262,6 @@ class UiTweaksPlugin(BasePlugin):
             
             Header(text=getString("account_and_display", "Account & Display")),
             self.Quanta_switch("enable_non_clickable_preview", getString("non_clickable_preview", "Non-Clickable Chat Preview"), False, lambda v: self._apply_hooks(), link_alias="enable_non_clickable_preview"),
-            self.Quanta_switch("enable_account_visibility", getString("account_visibility", "Account Visibility"), False, lambda v: self._apply_hooks(), link_alias="enable_account_visibility"),
-            Divider(text=getString("account_visibility_subtext", "Hide/show accounts by long-pressing theme button")),
             
             Header(text=getString("advanced", "Advanced")),
             self.Quanta_switch("enable_ai_role_limit", getString("ai_role_limit", "AI Role Limit Increaser"), False, lambda v: self._apply_hooks(), link_alias="enable_ai_role_limit"),
@@ -3683,8 +3679,6 @@ class UiTweaksPlugin(BasePlugin):
             "hook_sender_select_popup_ref",
             "hook_share_sheet_folders_ref",
             "hook_disable_topic_swipe_ref",
-            "hook_account_visibility_drawer_ref",
-            "hook_account_visibility_profile_ref",
             "contact_status_update_rows_hook",
             "contact_status_get_item_view_type_hook",
             "contact_status_bind_view_holder_hook",
@@ -3882,8 +3876,6 @@ class UiTweaksPlugin(BasePlugin):
             if self.get_setting("disable_topics_swipe", False):
                 self._hook_disable_topic_swipe()
             
-            if self.get_setting("enable_account_visibility", False):
-                self._hook_account_visibility()
             
             if self.get_setting("enable_add_to_folder_all_tabs", False):
                 self._hook_add_to_folder_all_tabs()
@@ -8930,183 +8922,7 @@ class UiTweaksPlugin(BasePlugin):
         except Exception:
             pass
 
-    def _hook_account_visibility(self):
-        try:
-            self.hidden_accounts = self.load_hidden_accounts()
-            
-            if drawer_adapter_class := self._get_class("org.telegram.ui.Adapters.DrawerLayoutAdapter"):
-                self.hook_drawer_adapter(drawer_adapter_class)
-            if profile_cell_class := self._get_class("org.telegram.ui.Cells.DrawerProfileCell"):
-                self.hook_profile_cell(profile_cell_class)
-        except Exception:
-            pass
 
-    def load_hidden_accounts(self):
-        try:
-            settings = self.get_setting("hidden_accounts", "[]")
-            import json
-            return json.loads(settings)
-        except:
-            return []
-
-    def save_hidden_accounts(self):
-        import json
-        self.set_setting("hidden_accounts", json.dumps(self.hidden_accounts))
-
-    def hook_drawer_adapter(self, drawer_adapter_class):
-        try:
-            method = drawer_adapter_class.getClass().getDeclaredMethod("notifyDataSetChanged")
-            method.setAccessible(True)
-
-            class DrawerAdapterHook:
-                def __init__(self, plugin):
-                    self._plugin_ref = weakref.ref(plugin)
-
-                @hook_filters(HookFilter.Condition("param.thisObject != null"))
-                def after_hooked_method(self, param):
-                    try:
-                        plugin = self._plugin_ref()
-                        if not plugin:
-                            return
-                        adapter = param.thisObject
-                        hidden_accounts = plugin.hidden_accounts
-                        if not hidden_accounts:
-                            return
-                        
-                        account_numbers = get_private_field(adapter, "accountNumbers")
-                        if not account_numbers:
-                            return
-                        
-                        from org.telegram.messenger import UserConfig
-                        current_account = UserConfig.selectedAccount
-                        iterator = account_numbers.iterator()
-                        while iterator.hasNext():
-                            account_num = iterator.next()
-                            if str(account_num) in hidden_accounts and account_num != current_account:
-                                iterator.remove()
-
-                    except:
-                        pass
-
-            self.hook_account_visibility_drawer_ref = self.hook_method(method, DrawerAdapterHook(self))
-        except:
-            pass
-
-    def hook_profile_cell(self, profile_cell_class):
-        try:
-            constructors = profile_cell_class.getClass().getDeclaredConstructors()
-            method = constructors[0]
-            method.setAccessible(True)
-
-            class ProfileCellHook:
-                def __init__(self, plugin):
-                    self._plugin_ref = weakref.ref(plugin)
-
-                @hook_filters(HookFilter.Condition("param.thisObject != null"))
-                def after_hooked_method(self, param):
-                    try:
-                        plugin = self._plugin_ref()
-                        if not plugin:
-                            return
-                        profile_cell = param.thisObject
-                        plugin.replace_theme_button_listener(profile_cell)
-                    except:
-                        pass
-
-            self.hook_account_visibility_profile_ref = self.hook_method(method, ProfileCellHook(self))
-        except:
-            pass
-
-    def replace_theme_button_listener(self, profile_cell):
-        try:
-            if dark_theme_view := get_private_field(profile_cell, "darkThemeView"):
-                def account_visibility_handler(*args):
-                    try:
-                        self._perform_haptic()
-                        self.toggle_all_other_accounts()
-                    except:
-                        pass
-                
-                from android_utils import OnLongClickListener
-                dark_theme_view.setOnLongClickListener(OnLongClickListener(account_visibility_handler))
-        except:
-            pass
-
-    def toggle_all_other_accounts(self):
-        try:
-            accounts = self.get_account_info()
-            if len(accounts) <= 1:
-                return
-
-            other_accounts = [acc for acc in accounts if not acc['is_current']]
-            any_hidden = any(acc['hidden'] for acc in other_accounts)
-            
-            for account in other_accounts:
-                self.toggle_account_visibility(account['number'], not any_hidden)
-            
-        except:
-            pass
-
-    def toggle_account_visibility(self, account_number, hidden):
-        account_str = str(account_number)
-        if hidden:
-            if account_str not in self.hidden_accounts:
-                self.hidden_accounts.append(account_str)
-        else:
-            if account_str in self.hidden_accounts:
-                self.hidden_accounts.remove(account_str)
-        self.save_hidden_accounts()
-        self.refresh_drawer()
-
-    def refresh_drawer(self):
-        try:
-            from android_utils import run_on_ui_thread
-            run_on_ui_thread(self._refresh_drawer_impl, delay=100)
-        except:
-            pass
-    
-    def _refresh_drawer_impl(self):
-        try:
-            from org.telegram.ui import LaunchActivity
-            if (hasattr(LaunchActivity, 'instance') and LaunchActivity.instance and 
-                (drawer_adapter := get_private_field(LaunchActivity.instance, "drawerLayoutAdapter")) and
-                hasattr(drawer_adapter, 'notifyDataSetChanged')):
-                drawer_adapter.notifyDataSetChanged()
-                return
-        except:
-            pass
-    
-    def get_account_info(self):
-        accounts = []
-        try:
-            from org.telegram.messenger import UserConfig
-            current_account = UserConfig.selectedAccount
-            
-            for account_id in range(UserConfig.MAX_ACCOUNT_COUNT):
-                try:
-                    if (config := UserConfig.getInstance(account_id)).isClientActivated():
-                        if user := config.getCurrentUser():
-                            first_name = getattr(user, 'first_name', 'Unknown')
-                            last_name = getattr(user, 'last_name', '')
-                            name = f"{first_name} {last_name}".strip() or f"Account {account_id}"
-                            
-                            is_current = (account_id == current_account)
-                            if is_current:
-                                name += " (Current)"
-                            
-                            accounts.append({
-                                'number': account_id,
-                                'name': name,
-                                'user_id': user.id,
-                                'hidden': str(account_id) in self.hidden_accounts,
-                                'is_current': is_current
-                            })
-                except:
-                    continue
-        except:
-            pass
-        
-        return accounts
     
     def _hook_owner_channels(self):
         if self.hook_owner_channels_ref:
