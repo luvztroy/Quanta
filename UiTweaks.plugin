@@ -1313,7 +1313,8 @@ class UiTweaksPlugin(BasePlugin):
 
     def on_plugin_load(self):
 
-        self._mkstats_start()
+        if self.get_setting("enable_statistics", True):
+            self._mkstats_start()
 
         self.log(f"UiTweaks {__version__} loaded")
 
@@ -2446,8 +2447,9 @@ class UiTweaksPlugin(BasePlugin):
         
         settings.extend([
             Text(text=getString("Language", "Language"), icon="msg_language", on_click=lambda v: self._open_language(), link_alias="language"),
-            self.Quanta_switch("enable_header_particles", getString("particles", "Particles"), default=True, icon="msg_settings_ny", link_alias="enable_header_particles"),
+            self.Quanta_switch("enable_statistics", getString("enable_statistics", "Statistics"), default=True, icon="msg_stats_solar", link_alias="enable_statistics"),
             self.Quanta_switch("show_logs", getString("enable_debug_logging", "Debug Logging"), default=False, icon="msg_emoji_objects_solar", link_alias="show_logs"),
+            self.Quanta_switch("enable_header_particles", getString("particles", "Particles"), default=True, icon="msg_settings_ny", link_alias="enable_header_particles"),
         ])
         
         

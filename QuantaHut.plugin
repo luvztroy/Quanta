@@ -448,13 +448,15 @@ class QuantaHut(BasePlugin):
             
             Header(text=getString("general", "General")),
             Switch(key="enable_header_particles", text=getString("particles", "Particles"), default=True, icon="msg_settings_ny", link_alias="enable_header_particles"),
+            Switch(key="enable_statistics", text=getString("enable_statistics", "Statistics"), default=True, icon="msg_stats_solar", link_alias="enable_statistics"),
             Switch(key="show_logs", text=getString("enable_debug_logging_quantahut", "Enable Debug Logging"), default=DEFAULT_SHOW_LOGS, icon="menu_intro_solar", link_alias="show_logs"),
             Switch(key="show_restart_menu", text=getString("quantahut_show_restart", "Show Restart in Drawer"), default=DEFAULT_SHOW_RESTART_MENU, icon="msg_retry", on_change=self._on_restart_toggle_changed, link_alias="show_restart_menu"),
         ]
 
     def on_plugin_load(self):
 
-        self._mkstats_start()
+        if self.get_setting("enable_statistics", True):
+            self._mkstats_start()
 
         self.log("Initializing QuantaHut...")
         global setting_getter
