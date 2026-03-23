@@ -4447,7 +4447,7 @@ class UiTweaksPlugin(BasePlugin):
                         
                         send_helper = self.chat_activity.getSendMessagesHelper()
                         if send_helper:
-                            send_helper.sendMessage(self.messages, did, True, False, True, topic_id, 0)
+                            send_helper.sendMessage(self.messages, did, True, False, True, 0, 0)
                     
                     fragment1.finishFragment()
                     
@@ -4488,13 +4488,21 @@ class UiTweaksPlugin(BasePlugin):
                     
                     fragment1.presentFragment(new_chat_activity, True)
 
+                    try:
+                        new_chat_activity.setForwardParams(True)
+                    except Exception:
+                        pass
+
                     new_chat_activity.showFieldPanelForForward(True, self.messages)
                     params = get_private_field(new_chat_activity, "messagePreviewParams")
                     if params is not None:
                         try:
                             set_private_field(params, "hideForwardSendersName", True)
                         except:
-                            pass
+                            try:
+                                params.hideForwardSendersName = True
+                            except:
+                                pass
                 
                 return True
             
@@ -4553,7 +4561,7 @@ class UiTweaksPlugin(BasePlugin):
                             tid = d.topicId if hasattr(d, 'topicId') and d.topicId else 0
                             sh = s.c.getSendMessagesHelper()
                             if sh:
-                                sh.sendMessage(s.m, d.dialogId, True, False, True, tid, 0)
+                                sh.sendMessage(s.m, d.dialogId, True, s.hc, True, 0, 0)
                         
                         f.finishFragment()
                         
@@ -4589,6 +4597,12 @@ class UiTweaksPlugin(BasePlugin):
                             FU.applyTopic(nca, dids.get(0))
                         
                         f.presentFragment(nca, True)
+
+                        try:
+                            nca.setForwardParams(True)
+                        except Exception:
+                            pass
+
                         nca.showFieldPanelForForward(True, s.m)
                         pr = get_private_field(nca, "messagePreviewParams")
                         if pr:
@@ -4597,7 +4611,12 @@ class UiTweaksPlugin(BasePlugin):
                                 if s.hc:
                                     set_private_field(pr, "hideCaption", True)
                             except:
-                                pass
+                                try:
+                                    pr.hideForwardSendersName = True
+                                    if s.hc:
+                                        pr.hideCaption = True
+                                except:
+                                    pass
                     
                     return True
                 
@@ -4935,6 +4954,12 @@ class UiTweaksPlugin(BasePlugin):
                     text_view.setText(getString("hide_caption_option", "Hide Caption"))
                 else:
                     text_view.setText(getString("forward_option", "Forward"))
+
+                try:
+                    text_view.invalidate()
+                    text_view.requestLayout()
+                except Exception:
+                    pass
                 
             except Exception as e:
                 pass
