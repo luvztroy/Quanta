@@ -3858,7 +3858,7 @@ class UiTweaksPlugin(BasePlugin):
             if self.get_setting("enable_gif_spoiler", False):
                 self._hook_gif_spoiler()
             
-            if self.get_setting("enable_confirmation_settings", False) and self.get_setting("confirm_external_links", False):
+            if self.get_setting("confirm_external_links", False):
                 self._hook_process_external_url()
             
             if self.get_setting("enable_message_preview_enhancement", False):
@@ -10032,7 +10032,17 @@ class ConfirmationHook:
             should_confirm = False
             message_type = ""
 
-            if not self.plugin.get_setting("enable_confirmation_settings", False):
+            _any_confirm_enabled = any([
+                self.plugin.get_setting("confirm_stickers", False),
+                self.plugin.get_setting("confirm_voice", False),
+                self.plugin.get_setting("confirm_commands", False),
+                self.plugin.get_setting("confirm_round_video", False),
+                self.plugin.get_setting("confirm_video_file", False),
+                self.plugin.get_setting("confirm_photo", False),
+                self.plugin.get_setting("confirm_document", False),
+                self.plugin.get_setting("confirm_gif", False),
+            ])
+            if not _any_confirm_enabled:
                 should_confirm = False
             elif is_command and self.plugin.get_setting("confirm_commands", False):
                 if self.plugin.command_from_message_click:
@@ -10041,14 +10051,14 @@ class ConfirmationHook:
             elif is_photo and self.plugin.get_setting("confirm_photo", False):
                 should_confirm = True
                 message_type = getString("message_type_photo", "photo")
-            elif is_sticker and self.plugin.get_setting("confirm_stickers", True):
+            elif is_sticker and self.plugin.get_setting("confirm_stickers", False):
                 should_confirm = True
                 message_type = getString("message_type_sticker", "sticker")
                 self.pending_sticker_doc = doc
-            elif is_voice and self.plugin.get_setting("confirm_voice", True):
+            elif is_voice and self.plugin.get_setting("confirm_voice", False):
                 should_confirm = True
                 message_type = getString("message_type_voice_message", "voice message")
-            elif is_round_video and self.plugin.get_setting("confirm_round_video", True):
+            elif is_round_video and self.plugin.get_setting("confirm_round_video", False):
                 should_confirm = True
                 message_type = getString("message_type_round_video_message", "round video message")
             elif is_video_file and self.plugin.get_setting("confirm_video_file", False):
@@ -11641,7 +11651,7 @@ class ForwardConfirmationHook:
             if self._suppress_next:
                 self._suppress_next = False
                 return
-            if not plugin.get_setting("enable_confirmation_settings", False) or not plugin.get_setting("confirm_forward", True):
+            if not plugin.get_setting("confirm_forward", False):
                 return
             args = list(param.args) if param.args else []
             def on_confirm():
@@ -11696,7 +11706,6 @@ class JoinConfirmationClickListener(dynamic_proxy(find_class("android.view.View$
     def onClick(self, view):
         plugin_instance = uitweaks_plugin_instance() if uitweaks_plugin_instance else None
         if (not plugin_instance or 
-            not plugin_instance.get_setting("enable_confirmation_settings", False) or 
             not plugin_instance.get_setting("confirm_join_chat", False) or 
             not self._is_join_action()):
             self.original_listener.onClick(view)
