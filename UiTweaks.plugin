@@ -1226,7 +1226,6 @@ class UiTweaksPlugin(BasePlugin):
         
         self.hook_in_message_translation_alert_ref = None
         
-        self.hook_owner_channels_ref = None
         self.hook_remove_from_folders_ref = None
         self._remove_from_folders_state = {}
         
@@ -2241,7 +2240,6 @@ class UiTweaksPlugin(BasePlugin):
             self.Quanta_switch("disable_emoji_suggestions", getString("disable_emoji_suggestions", "Disable Emoji Suggestions"), False, lambda v: self._apply_hooks(), link_alias="disable_emoji_suggestions"),
             self.Quanta_switch("remove_greeting_sticker", getString("remove_greeting_sticker", "Remove Greeting Sticker"), False, lambda v: self._apply_hooks(), link_alias="remove_greeting_sticker"),
             self.Quanta_switch("remove_https_from_links", getString("remove_https_from_links", "Remove HTTPS From Links"), False, lambda v: self._apply_hooks(), link_alias="remove_https_from_links"),
-            self.Quanta_switch("show_owner_channels", getString("show_owner_channels", "Owned channels/groups like TDesktop"), False, lambda v: self._apply_hooks(), link_alias="show_owner_channels"),
             self.Quanta_switch("remove_from_folders_on_leave", getString("remove_from_folders_on_leave", "Remove chat from folders on leave"), False, lambda v: self._apply_hooks(), link_alias="remove_from_folders_on_leave"),
             self.Quanta_switch("enable_music_speed_control", getString("enable_music_speed_control", "Music Speed Control"), False, lambda v: self._apply_hooks(), link_alias="enable_music_speed_control"),
             Divider(text=getString("music_speed_control_info", "Enable playback speed control for all music files regardless of duration.")) if self.get_setting("enable_music_speed_control", False) else None,
@@ -3730,7 +3728,6 @@ class UiTweaksPlugin(BasePlugin):
             "hook_in_message_translation_alert_ref",
             "hook_in_message_translation_revert_ref",
             "hook_hide_via_bot_ref",
-            "hook_owner_channels_ref",
             "hook_remove_from_folders_ref",
             "hook_bookmark_create_view_ref",
             "hook_bookmark_action_bar_ref",
@@ -3968,9 +3965,6 @@ class UiTweaksPlugin(BasePlugin):
 
             if self.get_setting("manual_translation_behavior", 0) == 1:
                 self._hook_in_message_translation()
-
-            if self.get_setting("show_owner_channels", False):
-                self._hook_owner_channels()
 
             if self.get_setting("remove_from_folders_on_leave", False):
                 self._hook_remove_from_folders()
@@ -8951,152 +8945,6 @@ class UiTweaksPlugin(BasePlugin):
 
 
     
-    def _hook_owner_channels(self):
-        if self.hook_owner_channels_ref:
-            return
-        try:
-            f = get_last_fragment()
-            if not f:
-                return
-            a = f.getParentActivity()
-            if not a or "LaunchActivity" not in a.getClass().getName():
-                return
-            
-            sm_field = a.getClass().getDeclaredField("sideMenu")
-            sm_field.setAccessible(True)
-            menu = sm_field.get(a)
-            if not menu:
-                return
-            
-            ad_field = a.getClass().getDeclaredField("drawerLayoutAdapter")
-            ad_field.setAccessible(True)
-            adapter = ad_field.get(a)
-            
-            orig_listener = None
-            try:
-                lf = menu.getClass().getSuperclass().getDeclaredField("onItemLongClickListener")
-                lf.setAccessible(True)
-                orig_listener = lf.get(menu)
-            except:
-                pass
-            
-            Listener = find_class("org.telegram.ui.Components.RecyclerListView$OnItemLongClickListener")
-            plugin_ref = weakref.ref(self)
-            activity = a
-            
-            class OwnerChannelsLongClickListener(dynamic_proxy(Listener)):
-                def onItemClick(self, v, p):
-                    try:
-                        plugin = plugin_ref()
-                        if not plugin or not plugin.get_setting("show_owner_channels", False):
-                            if orig_listener:
-                                return orig_listener.onItemClick(v, p)
-                            return False
-                        
-                        i = adapter.getId(p) if adapter else -1
-                        if i == 2:
-                            plugin._owner_channels_show_options(activity, True)
-                            return True
-                        if i == 4:
-                            plugin._owner_channels_show_options(activity, False)
-                            return True
-                        if orig_listener:
-                            return orig_listener.onItemClick(v, p)
-                    except:
-                        pass
-                    return False
-            
-            menu.setOnItemLongClickListener(OwnerChannelsLongClickListener())
-
-        except:
-            pass
-    
-    def _owner_channels_show_options(self, ctx, is_group):
-        try:
-            from org.telegram.tgnet import SerializedData
-            type_name = getString("groups", "Groups") if is_group else getString("channels", "Channels")
-            
-            b = AlertDialogBuilder(ctx)
-            b.set_title(type_name)
-            
-            items = [
-                type_name + " " + getString("where_im_admin", "where I'm admin"),
-                getString("my_prefix", "My ") + type_name
-            ]
-            
-            def on_item_click(dialog, which):
-                try:
-                    dialog.dismiss()
-                    is_owner_only = (which == 1)
-                    self._owner_channels_open_dialogs_activity(ctx, is_group, is_owner_only)
-                except:
-                    pass
-            
-            b.set_items(items, on_item_click)
-            b.set_negative_button(getString("cancel", "Cancel"), lambda d, _: d.dismiss())
-            b.show()
-        except:
-            pass
-    
-    def _owner_channels_open_dialogs_activity(self, ctx, is_group, is_owner_only):
-        try:
-            from org.telegram.tgnet import SerializedData
-            f = get_last_fragment()
-            if not f:
-                return
-            
-            try:
-                dlc_field = f.getParentActivity().getClass().getDeclaredField("drawerLayoutContainer")
-                dlc_field.setAccessible(True)
-                dlc = dlc_field.get(f.getParentActivity())
-                if dlc:
-                    dlc.closeDrawer(False)
-            except:
-                pass
-            
-            if is_group:
-                request_peer = TLRPC.TL_requestPeerTypeChat()
-            else:
-                request_peer = TLRPC.TL_requestPeerTypeBroadcast()
-            
-            if is_owner_only:
-                request_peer.creator = True
-            else:
-                admin_rights = TLRPC.TL_chatAdminRights()
-                admin_rights.other = True
-                request_peer.user_admin_rights = admin_rights
-            
-            buffer = SerializedData()
-            request_peer.serializeToStream(buffer)
-            request_peer_bytes = buffer.toByteArray()
-            buffer.cleanup()
-            
-            args = Bundle()
-            args.putBoolean("onlySelect", True)
-            args.putInt("dialogsType", 15)
-            args.putByteArray("requestPeerType", request_peer_bytes)
-            
-            if is_group:
-                args.putBoolean("allowChannels", False)
-                args.putBoolean("allowUsers", False)
-                args.putBoolean("allowBots", False)
-                args.putBoolean("allowGroups", True)
-                args.putBoolean("allowMegagroups", True)
-                args.putBoolean("allowLegacyGroups", True)
-            else:
-                args.putBoolean("allowChannels", True)
-                args.putBoolean("allowUsers", False)
-                args.putBoolean("allowBots", False)
-                args.putBoolean("allowGroups", False)
-                args.putBoolean("allowMegagroups", False)
-                args.putBoolean("allowLegacyGroups", False)
-            
-            DialogsActivity = find_class("org.telegram.ui.DialogsActivity")
-            dialogs = DialogsActivity(args)
-            f.presentFragment(dialogs)
-        except:
-            pass
-
     def _hook_custom_privacy(self):
         if self.hook_custom_privacy_ref:
             return
