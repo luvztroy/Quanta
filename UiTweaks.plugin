@@ -13867,6 +13867,14 @@ class PinnedReactionsDelegate(dynamic_proxy(UniversalFragment.UniversalFragmentD
         EmojiView = jclass("org.telegram.ui.Components.EmojiView")
         EmojiViewDelegate = jclass("org.telegram.ui.Components.EmojiView$EmojiViewDelegate")
         
+        def show_bulletin_on_top(text, icon):
+            from org.telegram.ui.Components import BulletinFactory
+            run_on_ui_thread(lambda: BulletinFactory.of(fragment).createSimpleBulletin(icon, text).show(True))
+
+        def show_bulletin_on_top(text, icon):
+            from org.telegram.ui.Components import BulletinFactory
+            run_on_ui_thread(lambda: BulletinFactory.of(fragment).createSimpleBulletin(icon, text).show(True))
+
         def add_reaction(emoticon=None, document_id=None):
             plugin = plugin_ref()
             if not plugin:
@@ -13877,19 +13885,19 @@ class PinnedReactionsDelegate(dynamic_proxy(UniversalFragment.UniversalFragmentD
             
             if document_id:
                 if not UserConfig.getInstance(UserConfig.selectedAccount).isPremium():
-                    BulletinHelper.show_simple(getString("premium_required", "Premium required"), R_tg.raw.star_premium_2, fragment)
+                    show_bulletin_on_top(getString("premium_required", "Premium required"), R_tg.raw.star_premium_2)
                     return
                 
                 for reaction in reactions:
                     if reaction.get("document_id") == document_id:
-                        BulletinHelper.show_simple(getString("already_pinned", "Already pinned"), R_tg.raw.ic_pin, fragment)
+                        show_bulletin_on_top(getString("already_pinned", "Already pinned"), R_tg.raw.ic_pin)
                         return
                 
                 reactions.append({"document_id": document_id})
             elif emoticon:
                 for reaction in reactions:
                     if reaction.get("emoticon") == emoticon:
-                        BulletinHelper.show_simple(getString("already_pinned", "Already pinned"), R_tg.raw.ic_pin, fragment)
+                        show_bulletin_on_top(getString("already_pinned", "Already pinned"), R_tg.raw.ic_pin)
                         return
                 
                 reactions.append({"emoticon": emoticon})
@@ -13922,7 +13930,7 @@ class PinnedReactionsDelegate(dynamic_proxy(UniversalFragment.UniversalFragmentD
                 return False
             
             def isUserSelf(self_delegate):
-                return False
+                return True
             
             def getDialogId(self_delegate):
                 return 0
