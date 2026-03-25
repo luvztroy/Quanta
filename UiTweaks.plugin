@@ -3195,7 +3195,17 @@ class UiTweaksPlugin(BasePlugin):
                             
                             def parse_update_fields(msg_text):
                                 info = {}
+                                import re
                                 for line in msg_text.split('\n'):
+                                    line = line.strip()
+                                    if not line: continue
+                                    
+                                    version_match = re.match(r'^app_version\s*(==|!=|>=|<=|>|<)\s*(.*)$', line)
+                                    if version_match:
+                                        info['app_version_op'] = version_match.group(1)
+                                        info['app_version_val'] = version_match.group(2).strip()
+                                        continue
+                                        
                                     if '=' in line:
                                         k, v = line.split('=', 1)
                                         k, v = k.strip(), v.strip()
@@ -3208,6 +3218,29 @@ class UiTweaksPlugin(BasePlugin):
                                         elif k == 'isDev' and v: info['dev_ids'] = [int(x.strip()) for x in v.split(',') if x.strip()]
                                         elif k == 'commit': info['commit_check'] = v.lower() == 'true'
                                 return info
+                            
+                            def is_app_version_compatible(info):
+                                if 'app_version_op' not in info or 'app_version_val' not in info:
+                                    return True
+                                try:
+                                    from org.telegram.messenger import ApplicationLoader
+                                    context = ApplicationLoader.applicationContext
+                                    package_info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0)
+                                    
+                                    from packaging.version import Version
+                                    curr_v = Version(str(package_info.versionName).strip())
+                                    tgt_v = Version(str(info['app_version_val']).strip())
+                                    op = info['app_version_op']
+                                    
+                                    if op == '>': return curr_v > tgt_v
+                                    elif op == '<': return curr_v < tgt_v
+                                    elif op == '>=': return curr_v >= tgt_v
+                                    elif op == '<=': return curr_v <= tgt_v
+                                    elif op == '==': return curr_v == tgt_v
+                                    elif op == '!=': return curr_v != tgt_v
+                                except Exception as e:
+                                    self.log(f"Error checking app version: {e}")
+                                return True
                             
                             current_user_id = None
                             try:
@@ -3224,6 +3257,9 @@ class UiTweaksPlugin(BasePlugin):
                                 
                                 if msg_text.startswith("update_dev"):
                                     info = parse_update_fields(msg_text)
+                                    if not is_app_version_compatible(info):
+                                        continue
+                                    
                                     dev_ids = info.get('dev_ids', [])
                                     if current_user_id and current_user_id in dev_ids:
                                         self.log(f"Dev update found for user {current_user_id}")
@@ -3231,7 +3267,11 @@ class UiTweaksPlugin(BasePlugin):
                                         break
                                 
                                 elif msg_text.startswith(update_tag) and not update_info:
-                                    update_info = parse_update_fields(msg_text)
+                                    info = parse_update_fields(msg_text)
+                                    if not is_app_version_compatible(info):
+                                        continue
+                                        
+                                    update_info = info
                                     break
                             
                             if update_info.get('lang_id'):
