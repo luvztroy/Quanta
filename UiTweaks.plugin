@@ -12831,6 +12831,11 @@ class MusicSpeedControlHook:
             instance = param.thisObject
             if self._is_music_field is None or self._playback_button_field is None:
                 c = instance.getClass()
+                while c is not None and not c.getName().endswith(".FragmentContextView"):
+                    c = c.getSuperclass()
+                
+                if not c:
+                    return
                 self._is_music_field = c.getDeclaredField("isMusic")
                 self._is_music_field.setAccessible(True)
                 self._playback_button_field = c.getDeclaredField("playbackSpeedButton")
@@ -12848,9 +12853,13 @@ class MusicSpeedControlHook:
             is_music = self._is_music_field.getBoolean(instance)
             btn = self._playback_button_field.get(instance)
             if is_music and btn is not None:
-                btn.setVisibility(0)
-                btn.setAlpha(1.0)
-                btn.setEnabled(True)
+                if btn.getVisibility() != 0:
+                    btn.setVisibility(0)
+                if btn.getAlpha() < 1.0:
+                    btn.setAlpha(1.0)
+                if not btn.isEnabled():
+                    btn.setEnabled(True)
+                
                 speed_btn_width = AndroidUtilities.dp(36)
                 try:
                     if self._title_text_view_field is not None:
@@ -12861,10 +12870,10 @@ class MusicSpeedControlHook:
                                 title_view.setPadding(
                                     title_view.getPaddingLeft(),
                                     title_view.getPaddingTop(),
-                                    current_right + speed_btn_width,
+                                    current_right + speed_btn_width + AndroidUtilities.dp(8),
                                     title_view.getPaddingBottom()
                                 )
-                except Exception:
+                except Exception as e:
                     pass
                 try:
                     if self._subtitle_text_view_field is not None:
@@ -12875,23 +12884,22 @@ class MusicSpeedControlHook:
                                 subtitle_view.setPadding(
                                     subtitle_view.getPaddingLeft(),
                                     subtitle_view.getPaddingTop(),
-                                    current_right + speed_btn_width,
+                                    current_right + speed_btn_width + AndroidUtilities.dp(8),
                                     subtitle_view.getPaddingBottom()
                                 )
-                except Exception:
+                except Exception as e:
                     pass
+
                 try:
                     methods = instance.getClass().getDeclaredMethods()
-                    target = None
                     for m in methods:
                         if m.getName() == "updatePlaybackButton" and len(m.getParameterTypes()) == 1:
-                            target = m
+                            m.setAccessible(True)
+                            m.invoke(instance, False)
                             break
-                    if target is not None:
-                        target.setAccessible(True)
-                        target.invoke(instance, False)
-                except Exception:
+                except Exception as e:
                     pass
+                    
         except Exception as e:
             pass
 
