@@ -7282,7 +7282,7 @@ class UiTweaksPlugin(BasePlugin):
 
     def _setup_fab_settings_listener(self, dialogs_activity):
         try:
-            large_btn = get_private_field(dialogs_activity, "floatingButtonContainer")
+            large_btn = get_private_field(dialogs_activity, "floatingButton3")
             if large_btn is None:
                 return
             
