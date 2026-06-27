@@ -5171,7 +5171,7 @@ QuantaHut._link_alias_hide_popup = _link_alias_hide_popup
 QuantaHut._link_alias_invalidate_settings_cache = _link_alias_invalidate_settings_cache
 
 
-def _setup_ui_quanta_module(self):
+def _setup_ui_quanta_module(self=None):
     import sys
     import types
     
@@ -5181,5 +5181,6 @@ def _setup_ui_quanta_module(self):
     sys.modules['ui.quanta'].MultiSelector = MultiSelector
     sys.modules['ui.quanta'].BottomSheet = BottomSheet
 
+_setup_ui_quanta_module()
 
 QuantaHut._setup_ui_quanta_module = _setup_ui_quanta_module
