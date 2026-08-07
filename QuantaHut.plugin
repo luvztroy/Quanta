@@ -4129,7 +4129,7 @@ class _PluginSettingsSearchCreateViewHook:
             LocaleController = jclass("org.telegram.messenger.LocaleController")
             R_string = jclass("org.telegram.messenger.R$string")
 
-            search_item = menu.addItem(0, R.drawable.ic_ab_search)
+            search_item = menu.addItem(0, R.drawable.outline_header_search)
             search_item.setIsSearchField(True)
             search_item.setSearchFieldHint(LocaleController.getString(R_string.Search))
             set_private_field(activity, "searchItem", search_item)
