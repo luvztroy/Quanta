@@ -4422,28 +4422,46 @@ def _link_alias_collect_settings_with_alias(self):
         if not controller:
             return settings_list
 
-        settings_map = controller.settings
-        if not settings_map:
-            return settings_list
+        settings_map = getattr(controller, "settings", None)
+        plugins_map = getattr(controller, "plugins", None)
 
-        plugins_map = controller.plugins
+        if settings_map is not None:
+            key_set = settings_map.keySet()
+            key_array = key_set.toArray()
 
-        key_set = settings_map.keySet()
-        key_array = key_set.toArray()
-        
-        for i in range(len(key_array)):
-            plugin_id = key_array[i]
-            try:
-                plugin_settings = settings_map.get(plugin_id)
-                if not plugin_settings:
-                    continue
+            for i in range(len(key_array)):
+                plugin_id = key_array[i]
+                try:
+                    plugin_settings = settings_map.get(plugin_id)
+                    if not plugin_settings:
+                        continue
 
-                plugin = plugins_map.get(plugin_id) if plugins_map else None
-                plugin_name = plugin.getName() if plugin else str(plugin_id)
+                    plugin = plugins_map.get(plugin_id) if plugins_map else None
+                    plugin_name = plugin.getName() if plugin else str(plugin_id)
 
-                self._link_alias_collect_from_java_list(settings_list, plugin_id, plugin_name, plugin_settings, "")
-            except:
-                pass
+                    self._link_alias_collect_from_java_list(settings_list, plugin_id, plugin_name, plugin_settings, "")
+                except:
+                    pass
+        else:
+            plugin_ids = getattr(controller, "plugins", None)
+            if plugin_ids is not None:
+                key_set = plugin_ids.keySet()
+                key_array = key_set.toArray()
+                get_settings_list = getattr(controller, "getPluginSettingsList", None)
+
+                for i in range(len(key_array)):
+                    plugin_id = key_array[i]
+                    try:
+                        plugin_settings = get_settings_list(plugin_id) if callable(get_settings_list) else None
+                        if not plugin_settings:
+                            continue
+
+                        plugin = plugin_ids.get(plugin_id)
+                        plugin_name = plugin.getName() if plugin else str(plugin_id)
+
+                        self._link_alias_collect_from_java_list(settings_list, plugin_id, plugin_name, plugin_settings, "")
+                    except:
+                        pass
 
         extera_settings = self._link_alias_collect_extera_settings_with_alias()
         settings_list.extend(extera_settings)
@@ -4684,31 +4702,68 @@ def _link_alias_show_bot_commands_popup(self, settings):
 
         commands = []
         descriptions = []
-        self.link_alias_current_settings = {}
-        
+        ephemeral_flags = []
+        current_settings = {}
+
         for setting in settings[:10]:
             display_alias = setting['link_alias'].split(':')[-1]
-            cmd = display_alias
+            cmd = "/" + display_alias
             commands.append(cmd)
             descriptions.append(setting['setting_name'])
-            self.link_alias_current_settings[cmd] = setting
+            ephemeral_flags.append(False)
+            current_settings[cmd] = setting
 
-        new_result_field = bot_adapter.getClass().getDeclaredField("newResult")
-        new_result_field.setAccessible(True)
-        new_result = new_result_field.get(bot_adapter)
-        new_result.clear()
-        for cmd in commands:
-            new_result.add(cmd)
+        list_view = bot_container.listView
+        if list_view is None:
+            list_view = getattr(bot_container, 'listView', None)
 
-        new_result_help_field = bot_adapter.getClass().getDeclaredField("newResultHelp")
-        new_result_help_field.setAccessible(True)
-        new_result_help = new_result_help_field.get(bot_adapter)
-        new_result_help.clear()
-        for desc in descriptions:
-            new_result_help.add(desc)
+        class PopupRunnable(RunnableProxy):
+            def __init__(self, cb):
+                super().__init__()
+                self.cb = cb
 
-        bot_adapter.notifyDataSetChanged()
-        
+            def run(self):
+                self.cb()
+
+        def apply_popup_data():
+            try:
+                if not bot_container or not bot_adapter:
+                    return
+
+                new_result_field = bot_adapter.getClass().getDeclaredField("newResult")
+                new_result_field.setAccessible(True)
+                new_result = new_result_field.get(bot_adapter)
+                new_result.clear()
+                for cmd in commands:
+                    new_result.add(cmd)
+
+                new_result_help_field = bot_adapter.getClass().getDeclaredField("newResultHelp")
+                new_result_help_field.setAccessible(True)
+                new_result_help = new_result_help_field.get(bot_adapter)
+                new_result_help.clear()
+                for desc in descriptions:
+                    new_result_help.add(desc)
+
+                new_result_ephemeral_field = bot_adapter.getClass().getDeclaredField("newResultEphemeral")
+                new_result_ephemeral_field.setAccessible(True)
+                new_result_ephemeral = new_result_ephemeral_field.get(bot_adapter)
+                new_result_ephemeral.clear()
+                for ephemeral in ephemeral_flags:
+                    new_result_ephemeral.add(ephemeral)
+
+                self.link_alias_current_settings = current_settings
+                bot_adapter.notifyDataSetChanged()
+            except Exception as e:
+                self.log(f"Failed to update bot commands popup: {e}")
+
+        if list_view:
+            try:
+                list_view.post(PopupRunnable(apply_popup_data))
+            except Exception:
+                run_on_ui_thread(lambda: apply_popup_data())
+        else:
+            run_on_ui_thread(lambda: apply_popup_data())
+
         plugin_ref = weakref.ref(self)
         
         class ClickListener(dynamic_proxy(RecyclerListView.OnItemClickListener)):
