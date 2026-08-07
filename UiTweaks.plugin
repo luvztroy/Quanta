@@ -8807,7 +8807,7 @@ class UiTweaksPlugin(BasePlugin):
             RPC = find_class("org.telegram.ui.ActionBar.Theme$ResourcesProvider")
             BT = jclass("java.lang.Boolean").TYPE
             
-            mth = AC.getClass().getDeclaredMethod("createClearOrDeleteDialogAlert", BF, BT, BT, BT, CC, UC, BT, BT, BT, BCC, RPC)
+            mth = AC.getClass().getDeclaredMethod("createClearOrDeleteDialogAlert", BF, BT, BT, CC, UC, BT, BT, BT, BT, BCC, RPC)
             mth.setAccessible(True)
             plugin_ref = weakref.ref(self)
             
@@ -8817,7 +8817,7 @@ class UiTweaksPlugin(BasePlugin):
                         p = plugin_ref()
                         if not p or not p.get_setting("remove_from_folders_on_leave", False):
                             return
-                        fr, cl, ad, ch, cb = param.args[0], param.args[1], param.args[2], param.args[4], param.args[9]
+                        fr, cl, ad, ch, cb = param.args[0], param.args[1], param.args[2], param.args[3], param.args[9]
                         if cl or ad or ch is None: return
                         chat_id = -ch.id
                         fwc = p._rff_get_filters_containing_chat(chat_id, fr)
@@ -8832,7 +8832,7 @@ class UiTweaksPlugin(BasePlugin):
                         p = plugin_ref()
                         if not p or not p.get_setting("remove_from_folders_on_leave", False):
                             return
-                        fr, cl, ad, ch = param.args[0], param.args[1], param.args[2], param.args[4]
+                        fr, cl, ad, ch = param.args[0], param.args[1], param.args[2], param.args[3]
                         if cl or ad or ch is None: return
                         run_on_ui_thread(lambda: p._rff_inject_checkbox(fr, -ch.id))
                     except: pass
