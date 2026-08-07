@@ -140,8 +140,6 @@ class QuantaHut(BasePlugin):
             Selector(key="pill_shape_style", text=getString("pill_shape_style", "Pills Shape"), items=[getString("pill_shape_pill", "Pill"), getString("pill_shape_chips", "Chips")], default=0, icon="menu_tag_filter_solar", on_change=self._on_pill_shape_changed, link_alias="pill_shape_style"),
             Switch(key="enable_plugin_settings_search", text=getString("plugin_settings_search", "Plugin Settings Search"), default=True, icon="msg_search", link_alias="plugin_settings_search"),
             Switch(key="enable_link_alias_search", text=getString("link_alias_search", "Link alias search"), default=True, icon="msg_link2_solar", link_alias="link_alias_search"),
-            Switch(key="enable_safe_mode", text=getString("safe_mode", "Safe Mode"), default=False, icon="msg_secret", link_alias="enable_safe_mode"),
-            Divider(text=getString("safe_mode_subtext", "Press volume down 5 times quickly to enable plugin safe mode ~ In Safe Mode, all plugins are inactive. This allows you to safely find and disable a problematic plugin.")),
             
             Header(text=getString("export", "Export")),
             Text(text=getString("export_all_settings", "Export All Plugin Settings"), icon="msg_photo_rotate_solar", on_click=self._export_all_settings, link_alias="export_all_settings"),
@@ -193,15 +191,6 @@ class QuantaHut(BasePlugin):
         self.download_url = None
         self.checking_update = False
 
-        self.safe_mode_hook_ref = None
-        self.safe_mode_last_volume_down_time = 0
-        self.safe_mode_volume_down_count = 0
-        self.safe_mode_multi_tap_window = 2000
-        self.safe_mode_required_taps = 5
-        self.safe_mode_cooldown = 5000
-        self.safe_mode_volume_down_press_time = 0
-        self.safe_mode_is_holding = False
-        
         self.setup_hooks()
         self._update_restart_menu_item()
         self._setup_quanta_file_hook()
@@ -213,9 +202,6 @@ class QuantaHut(BasePlugin):
         
         if self.get_setting("enable_link_alias_search", True):
             self._setup_link_alias_search()
-        
-        if self.get_setting("enable_safe_mode", False):
-            self._hook_safe_mode()
         
         self._setup_ui_quanta_module()
         
@@ -987,61 +973,6 @@ class QuantaHut(BasePlugin):
     def unregister_message_context_menu_item(self, handle):
         return utilities.unregister_message_menu_item(handle)
 
-    def _hook_safe_mode(self):
-        try:
-            LaunchActivityClass = find_class("org.telegram.ui.LaunchActivity")
-            if not LaunchActivityClass:
-                return
-            
-            methods = LaunchActivityClass.getClass().getDeclaredMethods()
-            dispatch_method = None
-            for method in methods:
-                if method.getName() == "dispatchKeyEvent":
-                    dispatch_method = method
-                    break
-            
-            if not dispatch_method:
-                return
-            
-            dispatch_method.setAccessible(True)
-            self.safe_mode_hook_ref = self.hook_method(dispatch_method, _SafeModeHook(self))
-        except Exception:
-            pass
-    
-    def _on_safe_mode_detected(self):
-        try:
-            run_on_ui_thread(self._enable_safe_mode)
-        except Exception:
-            pass
-    
-    def _enable_safe_mode(self):
-        try:
-            from com.exteragram.messenger import ExteraConfig
-            from com.exteragram.messenger.plugins import PluginsController
-            from android.content import Context
-            from org.telegram.messenger import ApplicationLoader
-            
-            ExteraConfig.pluginsSafeMode = True
-            editor = ExteraConfig.editor
-            editor.putBoolean("pluginsSafeMode", True).apply()
-            
-            context = ApplicationLoader.applicationContext
-            plugin_prefs = context.getSharedPreferences("plugin_settings", Context.MODE_PRIVATE)
-            plugin_prefs.edit().putBoolean("had_crash", True).putString("crashed_plugin_id", "manual!").apply()
-            
-            PluginsController.getInstance().restart()
-            
-            try:
-                SafeModeBottomSheet = find_class("com.exteragram.messenger.plugins.ui.components.SafeModeBottomSheet")
-                fragment = get_last_fragment()
-                if fragment and SafeModeBottomSheet:
-                    SafeModeBottomSheet(fragment).show()
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-
     def on_plugin_unload(self):
 
         for ref in self.hook_refs:
@@ -1052,10 +983,6 @@ class QuantaHut(BasePlugin):
                     pass
         self.hook_refs.clear()
         
-        if self.safe_mode_hook_ref:
-            self.unhook_method(self.safe_mode_hook_ref)
-            self.safe_mode_hook_ref = None
-            
         if self.settings_search_create_view_hook:
             self.unhook_method(self.settings_search_create_view_hook)
             self.settings_search_create_view_hook = None
@@ -4235,61 +4162,6 @@ class _PluginSettingsSearchFillItemsHook:
                     items.add(item)
 
         except Exception as e:
-            pass
-
-
-from base_plugin import MethodHook
-
-class _SafeModeHook(MethodHook):
-    def __init__(self, plugin):
-        self._plugin_ref = weakref.ref(plugin)
-    
-    def before_hooked_method(self, param):
-        try:
-            plugin = self._plugin_ref()
-            if not plugin:
-                return
-            from android.view import KeyEvent
-            from java.lang import System
-            
-            if not param.args or len(param.args) == 0:
-                return
-            
-            key_event = param.args[0]
-            if not key_event:
-                return
-            
-            key_code = key_event.getKeyCode()
-            action = key_event.getAction()
-            
-            if key_code == KeyEvent.KEYCODE_VOLUME_DOWN:
-                current_time = System.currentTimeMillis()
-                
-                if action == KeyEvent.ACTION_DOWN:
-                    plugin.safe_mode_volume_down_press_time = current_time
-                    plugin.safe_mode_is_holding = False
-                elif action == KeyEvent.ACTION_UP:
-                    press_duration = current_time - plugin.safe_mode_volume_down_press_time
-                    
-                    if press_duration > 500:
-                        plugin.safe_mode_is_holding = True
-                        plugin.safe_mode_volume_down_count = 0
-                        return
-                    
-                    if (current_time - plugin.safe_mode_last_volume_down_time) > plugin.safe_mode_cooldown:
-                        plugin.safe_mode_volume_down_count = 1
-                        plugin.safe_mode_last_volume_down_time = current_time
-                    elif (current_time - plugin.safe_mode_last_volume_down_time) <= plugin.safe_mode_multi_tap_window:
-                        plugin.safe_mode_volume_down_count += 1
-                        plugin.safe_mode_last_volume_down_time = current_time
-                        if plugin.safe_mode_volume_down_count >= plugin.safe_mode_required_taps:
-                            plugin.safe_mode_volume_down_count = 0
-                            plugin._on_safe_mode_detected()
-                            param.setResult(True)
-                            return
-                        
-                        param.setResult(True)
-        except Exception:
             pass
 
 
