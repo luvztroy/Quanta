@@ -1073,7 +1073,6 @@ class UiTweaksPlugin(BasePlugin):
         self.checking_update = False
         
         self.hook_always_visible_schedule_button_ref = None
-        self.hook_remove_greeting_sticker_ref = None
         self.hook_remove_https_from_links_ref = None
         self.hook_share_alert_forward_open_ref = None
         self.hook_share_alert_forward_process_ref = None
@@ -1961,7 +1960,6 @@ class UiTweaksPlugin(BasePlugin):
             self.Quanta_switch("enable_select_all_media", getString("enable_select_all_media", "Select All Media Button"), False, lambda v: self._apply_hooks(), link_alias="enable_select_all_media"),
             self.Quanta_switch("enable_sleep_timer", getString("sleep_timer", "Music Sleep Timer"), False, lambda v: self._apply_hooks(), link_alias="enable_sleep_timer"),
             self.Quanta_switch("disable_emoji_suggestions", getString("disable_emoji_suggestions", "Disable Emoji Suggestions"), False, lambda v: self._apply_hooks(), link_alias="disable_emoji_suggestions"),
-            self.Quanta_switch("remove_greeting_sticker", getString("remove_greeting_sticker", "Remove Greeting Sticker"), False, lambda v: self._apply_hooks(), link_alias="remove_greeting_sticker"),
             self.Quanta_switch("remove_https_from_links", getString("remove_https_from_links", "Remove HTTPS From Links"), False, lambda v: self._apply_hooks(), link_alias="remove_https_from_links"),
             self.Quanta_switch("remove_from_folders_on_leave", getString("remove_from_folders_on_leave", "Remove chat from folders on leave"), False, lambda v: self._apply_hooks(), link_alias="remove_from_folders_on_leave"),
             self.Quanta_switch("enable_music_speed_control", getString("enable_music_speed_control", "Music Speed Control"), False, lambda v: self._apply_hooks(), link_alias="enable_music_speed_control"),
@@ -3448,7 +3446,6 @@ class UiTweaksPlugin(BasePlugin):
             "hook_ai_role_limit_settext_ref",
             "hook_select_all_media_ref",
             "hook_always_visible_schedule_button_ref",
-            "hook_remove_greeting_sticker_ref",
             "hook_remove_https_from_links_ref",
             "hook_sleep_timer_ref",
             "hook_sleep_timer_click_ref",
@@ -3676,9 +3673,6 @@ class UiTweaksPlugin(BasePlugin):
             
             if self.get_setting("swipe_action", 0) != 0:
                 self._hook_message_swipe_action()
-            
-            if self.get_setting("remove_greeting_sticker", False):
-                self._hook_remove_greeting_sticker()
             
             if self.get_setting("remove_https_from_links", False):
                 self._hook_remove_https_from_links()
@@ -6489,21 +6483,6 @@ class UiTweaksPlugin(BasePlugin):
                 return TLRPC.TL_inputMessagesFilterEmpty()
         except:
             return TLRPC.TL_inputMessagesFilterEmpty()
-    
-    def _hook_remove_greeting_sticker(self):
-        try:
-            ChatActivityClass = self._get_class("org.telegram.ui.ChatActivity")
-            if not ChatActivityClass:
-                return
-            
-            BooleanTYPE = self._get_class("java.lang.Boolean").TYPE
-            create_empty_view_method = self._get_declared_method(ChatActivityClass.getClass(), "createEmptyView", BooleanTYPE)
-            if create_empty_view_method is None:
-                return
-            
-            self.hook_remove_greeting_sticker_ref = self.hook_method(create_empty_view_method, RemoveGreetingStickerHook())
-        except Exception as e:
-            pass
     
     def _hook_select_all_media(self):
         try:
@@ -12749,26 +12728,6 @@ class DirectProfileHook:
             
         except Exception:
             pass
-
-
-class RemoveGreetingStickerHook(MethodReplacement):
-    def replace_hooked_method(self, param):
-        result = self.invoke_original_method(param)
-        
-        try:
-            chat_activity = param.thisObject
-            greetings_container = get_private_field(chat_activity, "greetingsViewContainer")
-            
-            if greetings_container is not None:
-                parent = greetings_container.getParent()
-                if parent is not None:
-                    parent.removeView(greetings_container)
-                set_private_field(chat_activity, "greetingsViewContainer", None)
-                
-        except Exception:
-            pass
-        
-        return result
 
 
 class MotionEventSwipeHook(MethodHook):
