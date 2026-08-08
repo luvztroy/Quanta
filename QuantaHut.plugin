@@ -9,7 +9,7 @@ import weakref
 from typing import List, Callable, Optional, Any
 from dataclasses import dataclass, field
 
-from base_plugin import BasePlugin, HookStrategy, MenuItemData, MenuItemType
+from base_plugin import BasePlugin, HookStrategy, MenuItemData, MenuItemType, MethodHook
 from android_utils import log, run_on_ui_thread
 from client_utils import get_last_fragment, run_on_queue, get_send_messages_helper
 from ui.bulletin import BulletinHelper
