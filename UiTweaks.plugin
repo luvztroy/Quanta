@@ -914,8 +914,6 @@ class UiTweaksPlugin(BasePlugin):
         self.hide_all_chats_folder = {}
         self.hook_folder_visibility_ref = None
 
-        self.hook_gift_menu_ref = None
-        
         self.hook_ai_summarize_create_view_ref = None
         self.hook_ai_summarize_item_click_ref = None
         self.ai_summarize_menu_id = 99997
@@ -1955,7 +1953,6 @@ class UiTweaksPlugin(BasePlugin):
             Header(text=getString("quick_access", "Quick Access")),
             self.Quanta_switch("fab_settings_shortcut", getString("fab_settings_shortcut", "FAB Shortcut"), False, lambda v: self._apply_hooks(), link_alias="fab_settings_shortcut"),
             self.Quanta_selector("fab_action_selector", getString("fab_action_selector", "Action"), [getString("fab_action_uitweaks_settings", "UiTweaks Settings"), getString("fab_action_archived_chats", "Archived Chats")], 0, lambda v: self._apply_hooks(), link_alias="fab_action_selector") if self.get_setting("fab_settings_shortcut", False) else None,
-            self.Quanta_switch("quick_access_gift_market", getString("quick_access_gift_market", "Quick Access to Gift Market"), False, lambda v: self._apply_hooks(), link_alias="quick_access_gift_market"),
             self.Quanta_switch("recent_chats_fragment", getString("recent_chats_fragment", "Recent Chats Manager"), False, lambda v: self._apply_hooks(), link_alias="recent_chats_fragment"),
             Divider(text=getString("recent_chats_info", "Long-press the Chats tab to open recent chats popup.")) if self.get_setting("recent_chats_fragment", False) else None,
 
@@ -3440,7 +3437,6 @@ class UiTweaksPlugin(BasePlugin):
             "safe_mode_hook_ref",
             "hook_folder_visibility_ref",
             "hook_search_by_user_id_ref",
-            "hook_gift_menu_ref",
             "hook_no_quote_pause_ref",
             "hook_ai_summarize_create_view_ref",
             "hook_ai_summarize_item_click_ref",
@@ -3648,9 +3644,6 @@ class UiTweaksPlugin(BasePlugin):
             
             if self.get_setting("enable_search_by_user_id", False):
                 self._hook_search_by_user_id()
-            
-            if self.get_setting("quick_access_gift_market", False):
-                self._hook_gift_action_bar_menu()
 
             if self.get_setting("recent_chats_fragment", False):
                 self._hook_recent_chats_fragment()
@@ -6725,76 +6718,6 @@ class UiTweaksPlugin(BasePlugin):
             
         except Exception as e:
             self.log(f"Error hooking always visible schedule button: {e}")
-    
-    def _hook_gift_action_bar_menu(self):
-        try:
-            ItemOptionsCls = find_class("org.telegram.ui.Components.ItemOptions")
-            DialogsActivityCls = find_class("org.telegram.ui.DialogsActivity")
-            if not ItemOptionsCls or not DialogsActivityCls:
-                return
-            show_method = ItemOptionsCls.getClass().getDeclaredMethod("show")
-            show_method.setAccessible(True)
-
-            class ItemOptionsShowHook:
-                def __init__(self, plugin):
-                    self._plugin_ref = weakref.ref(plugin)
-
-                def before_hooked_method(self, param):
-                    try:
-                        plugin = self._plugin_ref()
-                        if not plugin or not plugin.get_setting("quick_access_gift_market", False):
-                            return
-                        io = param.thisObject
-                        if not io:
-                            return
-                        frag_field = io.getClass().getDeclaredField("fragment")
-                        frag_field.setAccessible(True)
-                        frag = frag_field.get(io)
-                        if frag is None or not DialogsActivityCls.getClass().isInstance(frag):
-                            return
-                        plugin_ref = plugin
-
-                        class GiftRunnable(dynamic_proxy(jclass("java.lang.Runnable"))):
-                            def run(self_r):
-                                plugin_ref._open_gift_sheet()
-
-                        io.addGap()
-                        io.add(R_tg.drawable.menu_gift, LocaleController.getString(R_tg.string.Gift2TitleSelf1), False, GiftRunnable())
-                    except Exception:
-                        pass
-
-            self.hook_gift_menu_ref = self.hook_method(show_method, ItemOptionsShowHook(self))
-        except Exception:
-            pass
-
-    def _open_gift_sheet(self):
-        try:
-            def open_sheet():
-                try:
-                    current_account = UserConfig.selectedAccount
-                    client_user_id = UserConfig.getInstance(current_account).getClientUserId()
-                    if not hasattr(LaunchActivity, 'instance') or LaunchActivity.instance is None:
-                        return
-                    launch_activity = LaunchActivity.instance
-                    getSafeLastFragment_method = launch_activity.getClass().getDeclaredMethod("getSafeLastFragment")
-                    getSafeLastFragment_method.setAccessible(True)
-                    last_fragment = getSafeLastFragment_method.invoke(launch_activity)
-                    if last_fragment is None or last_fragment.getContext() is None:
-                        return
-                    GiftSheet = jclass("org.telegram.ui.Gifts.GiftSheet")
-                    gift_sheet = GiftSheet(
-                        last_fragment.getContext(),
-                        current_account,
-                        client_user_id,
-                        None,
-                        None
-                    )
-                    gift_sheet.show()
-                except Exception:
-                    pass
-            run_on_ui_thread(open_sheet)
-        except Exception:
-            pass
     
     def pre_request_hook(self, request_name: str, account: int, request):
         
