@@ -903,6 +903,7 @@ class UiTweaksPlugin(BasePlugin):
 
         self._select_all_id = 1000
         self._select_all_added_modes = set()
+        self._select_all_added_layouts = set()
         
         self._goto_items_added = set()
         
@@ -3282,6 +3283,7 @@ class UiTweaksPlugin(BasePlugin):
                 'added_send_media_buttons',
                 '_no_quote_buttons_created',
                 '_select_all_added_modes',
+                '_select_all_added_layouts',
                 '_goto_items_added',
                 'ai_summarize_hooked_activities',
                 'chat_action_bar_hooked_activities',
@@ -6520,17 +6522,22 @@ class UiTweaksPlugin(BasePlugin):
                             plugin._add_select_all_button(param.thisObject)
                     except:
                         pass
-            
+            #TODO 
+            self.hook_select_all_media_ref = []
             for constructor in SharedMediaLayoutClass.getClass().getDeclaredConstructors():
                 if len(constructor.getParameterTypes()) >= 5:
                     constructor.setAccessible(True)
-                    self.hook_select_all_media_ref = self.hook_method(constructor, SharedMediaLayoutHook())
-                    break
+                    ref = self.hook_method(constructor, SharedMediaLayoutHook())
+                    if ref:
+                        self.hook_select_all_media_ref.append(ref)
         except:
             pass
     
     def _add_select_all_button(self, shared_media_layout):
         try:
+            layout_hc = shared_media_layout.hashCode()
+            if layout_hc in self._select_all_added_layouts:
+                return
             action_mode_layout = get_private_field(shared_media_layout, "actionModeLayout")
             action_mode_views = get_private_field(shared_media_layout, "actionModeViews")
             if not action_mode_layout or action_mode_views is None:
@@ -6553,6 +6560,7 @@ class UiTweaksPlugin(BasePlugin):
             
             action_mode_layout.addView(select_all_item, 2, LinearLayout.LayoutParams(AndroidUtilities.dp(54), LinearLayout.LayoutParams.MATCH_PARENT))
             action_mode_views.add(2, select_all_item)
+            self._select_all_added_layouts.add(layout_hc)
         except:
             pass
     
