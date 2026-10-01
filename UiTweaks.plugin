@@ -72,7 +72,7 @@ __id__ = "ui_tweaks"
 __name__ = "UiTweaks"
 __type__ = "plugin"
 __description__ = "Well sometimes you just need to tweak things... (requires [QuantaHut](https://t.me/QuantaPlugins/228))"
-__version__ = "1.8.5.10-Beta"
+__version__ = "1.8.5.9-Beta"
 __author__ = "@luvztroy"
 __beta__ = "True"
 __min_version__ = "12.5.1"
@@ -292,8 +292,6 @@ class NonClickablePreviewPresentFragmentHook:
     def _add_open_profile_item(self, fragment, preview_menu, dialog_id):
         try:
             ActionBarMenuSubItem = jclass("org.telegram.ui.ActionBar.ActionBarMenuSubItem")
-            ProfileActivity = jclass("org.telegram.ui.ProfileActivity")
-            DialogObject = jclass("org.telegram.messenger.DialogObject")
             R = jclass("org.telegram.messenger.R")
             
             item_text = getString("open_profile", "Open Profile")
@@ -303,16 +301,16 @@ class NonClickablePreviewPresentFragmentHook:
             open_profile_item.setTextAndIcon(item_text, item_icon)
             open_profile_item.setMinimumWidth(160)
             
-            fragment_ref = weakref.ref(fragment)
-            def on_open_profile_click(*args, ref=fragment_ref, did=dialog_id):
-                f = ref()
-                if f:
-                    self._open_profile(f, did)
+            def on_open_profile_click(*args, frag=fragment, hk=self, did=dialog_id):
+                try:
+                    hk._open_profile(frag, did)
+                except Exception as e:
+                    pass
             click_listener = OnClickListener(on_open_profile_click)
             open_profile_item.setOnClickListener(click_listener)
             
             preview_menu.addView(open_profile_item)
-        except:
+        except Exception as e:
             pass
     
     def _add_open_chat_item(self, fragment, preview_menu, dialog_id):
@@ -327,96 +325,62 @@ class NonClickablePreviewPresentFragmentHook:
             open_chat_item.setTextAndIcon(item_text, item_icon)
             open_chat_item.setMinimumWidth(160)
             
-            fragment_ref = weakref.ref(fragment)
-            def on_open_chat_click(*args, ref=fragment_ref):
-                f = ref()
-                if f:
-                    self._open_chat(f)
+            def on_open_chat_click(*args, frag=fragment, hk=self):
+                try:
+                    hk._open_chat(frag)
+                except Exception as e:
+                    pass
             click_listener = OnClickListener(on_open_chat_click)
             open_chat_item.setOnClickListener(click_listener)
             
             preview_menu.addView(open_chat_item)
-        except:
+        except Exception as e:
             pass
     
     def _open_chat(self, fragment):
         try:
+            preview_fragment = None
+            try:
+                parent_layout = fragment.getParentLayout()
+                if parent_layout:
+                    preview_field = _ut_get_declared_field(parent_layout, "previewFragment")
+                    preview_fragment = preview_field.get(parent_layout) if preview_field is not None else None
+            except Exception as e:
+                pass
+            if preview_fragment is not None:
+                try:
+                    allow_field = _ut_get_declared_field(preview_fragment, "allowExpandPreviewByClick")
+                    if allow_field is not None:
+                        allow_field.setBoolean(preview_fragment, True)
+                except Exception as e:
+                    pass
             parent_layout = fragment.getParentLayout()
             if parent_layout:
                 parent_layout.expandPreviewFragment()
-        except:
+        except Exception as e:
             pass
     
     def _open_profile(self, fragment, dialog_id):
         try:
-            fragment.finishPreviewFragment()
-            
+            parent_layout = fragment.getParentLayout()
+            if parent_layout:
+                try:
+                    parent_layout.finishPreviewFragment()
+                except Exception as e:
+                    pass
             Bundle = jclass("android.os.Bundle")
             args = Bundle()
-            args.putBoolean("expandPhoto", False)
-            
             DialogObject = jclass("org.telegram.messenger.DialogObject")
-            if DialogObject.isUserDialog(dialog_id):
+            is_user = DialogObject.isUserDialog(dialog_id)
+            if is_user:
                 args.putLong("user_id", dialog_id)
             else:
-                chat_id_for_bundle = -dialog_id
-                args.putLong("chat_id", chat_id_for_bundle)
-            
+                args.putLong("chat_id", -dialog_id)
             ProfileActivity = jclass("org.telegram.ui.ProfileActivity")
-            present_fragment_method = fragment.getClass().getDeclaredMethod("presentFragment", jclass("org.telegram.ui.ActionBar.BaseFragment"))
-            present_fragment_method.setAccessible(True)
-            present_fragment_method.invoke(fragment, ProfileActivity(args))
-        except:
+            fragment.presentFragment(ProfileActivity(args))
+        except Exception as e:
             pass
 
-
-class AddToFolderAllTabsHook:
-    def __init__(self, plugin):
-        self._plugin_ref = weakref.ref(plugin)
-
-    @hook_filters(HookFilter.Condition("param.thisObject != null"))
-    def after_hooked_method(self, param):
-        try:
-            dialogs_activity = param.thisObject
-            
-            add_to_folder_item_field = _ut_get_declared_field(dialogs_activity, "addToFolderItem")
-            add_to_folder_item = add_to_folder_item_field.get(dialogs_activity) if add_to_folder_item_field is not None else None
-            
-            if add_to_folder_item is None:
-                return
-            
-            filter_tabs_view_field = _ut_get_declared_field(dialogs_activity, "filterTabsView")
-            filter_tabs_view = filter_tabs_view_field.get(dialogs_activity) if filter_tabs_view_field is not None else None
-            
-            folder_id_field = _ut_get_declared_field(dialogs_activity, "folderId")
-            folder_id = folder_id_field.getInt(dialogs_activity) if folder_id_field is not None else 0
-            
-            selected_dialogs_field = _ut_get_declared_field(dialogs_activity, "selectedDialogs")
-            selected_dialogs = selected_dialogs_field.get(dialogs_activity) if selected_dialogs_field is not None else None
-            
-            FiltersListBottomSheetClass = find_class("org.telegram.ui.Components.FiltersListBottomSheet")
-            if FiltersListBottomSheetClass:
-                can_add_filters = FiltersListBottomSheetClass.getCanAddDialogFilters(dialogs_activity, selected_dialogs)
-                has_available_folders = can_add_filters is not None and not can_add_filters.isEmpty()
-            else:
-                has_available_folders = False
-            
-            should_show = False
-            
-            if folder_id == 1:
-                should_show = True
-            elif (filter_tabs_view is not None and 
-                  filter_tabs_view.getVisibility() == View.VISIBLE and 
-                  has_available_folders):
-                should_show = True
-            
-            if should_show:
-                add_to_folder_item.setVisibility(View.VISIBLE)
-            else:
-                add_to_folder_item.setVisibility(View.GONE)
-                
-        except Exception:
-            pass
 
 class UnreadCountHook:
     def __init__(self, plugin_instance):
@@ -854,7 +818,6 @@ class UiTweaksPlugin(BasePlugin):
         self._current_back_button_ref = None
         self.counter_views = {}
         self._unhook_layout = None
-        self.hook_add_to_folder_all_tabs_ref = None
         self.forced_scroll_offset = 0
         
         self.unhook_send_message = None
@@ -2078,7 +2041,6 @@ class UiTweaksPlugin(BasePlugin):
 
             Header(text=getString("chat_list", "Chat List")),
             self.Quanta_switch("enable_select_all_dialogs", getString("select_all_dialogs_menu", "Select All Chats"), False, lambda v: self._apply_hooks(), link_alias="enable_select_all_dialogs"),
-            self.Quanta_switch("enable_add_to_folder_all_tabs", getString("add_to_folder_all_tabs", "Add to Folder in All Tabs"), False, lambda v: self._apply_hooks(), link_alias="enable_add_to_folder_all_tabs"),
             
             Header(text=getString("account_and_display", "Account & Display")),
             self.Quanta_switch("enable_non_clickable_preview", getString("non_clickable_preview", "Non-Clickable Chat Preview"), False, lambda v: self._apply_hooks(), link_alias="enable_non_clickable_preview"),
@@ -3576,7 +3538,6 @@ class UiTweaksPlugin(BasePlugin):
 
             "hook_check_send_button_ref",
             "hook_unread_count_ref",
-            "hook_add_to_folder_all_tabs_ref",
             "hook_play_sound_ref",
             "hook_soundpool_load_ref",
             "hook_search_links_ref",
@@ -3740,9 +3701,6 @@ class UiTweaksPlugin(BasePlugin):
             if self.get_setting("disable_topics_swipe", False):
                 self._hook_disable_topic_swipe()
             
-            
-            if self.get_setting("enable_add_to_folder_all_tabs", False):
-                self._hook_add_to_folder_all_tabs()
             
             if self.get_setting("unread_chat_count", False) or self.get_setting("unread_message_count", False) or self.get_setting("exclude_archived_from_count", False):
                 self._hook_unread_count()
@@ -4818,33 +4776,6 @@ class UiTweaksPlugin(BasePlugin):
                 pass
         
         run_on_ui_thread(update_text)
-    
-    def _hook_add_to_folder_all_tabs(self):
-        try:
-            DialogsActivityClass = self._get_class("org.telegram.ui.DialogsActivity")
-            if not DialogsActivityClass:
-                return
-            
-            try:
-                BooleanTYPE = self._get_class("java.lang.Boolean").TYPE
-                updateCountersMethod = self._get_declared_method(DialogsActivityClass.getClass(), "updateCounters", BooleanTYPE)
-            except:
-                try:
-                    updateCountersMethod = self._get_declared_method(DialogsActivityClass.getClass(), "updateCounters")
-                except:
-                    IntegerTYPE = self._get_class("java.lang.Integer").TYPE
-                    updateCountersMethod = self._get_declared_method(DialogsActivityClass.getClass(), "updateCounters", IntegerTYPE)
-            if updateCountersMethod is None:
-                return
-            
-            self.hook_add_to_folder_all_tabs_ref = self.hook_method(
-                updateCountersMethod,
-                AddToFolderAllTabsHook(self),
-                priority=0
-            )
-            
-        except Exception:
-            pass
     
     def _hook_unread_count(self):
         try:
