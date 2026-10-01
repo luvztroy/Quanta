@@ -1077,6 +1077,7 @@ class UiTweaksPlugin(BasePlugin):
         self.hook_share_alert_forward_process_ref = None
 
         self.hook_recent_chats_popup_longclick_ref = None
+        self.hook_recent_chats_menu_inject_ref = None
         self.hook_recent_chats_fragment_activity_resume_refs = None
         self._recent_chats_fragment_data = {}
         self._recent_chats_db = None
@@ -1604,6 +1605,63 @@ class UiTweaksPlugin(BasePlugin):
         cell.setOnLongClickListener(OnLongClickListener(make_long_click(did)))
         return cell
 
+    def _inject_recent_chats_menu_item(self, options):
+        try:
+            fragment = get_private_field(options, "fragment")
+            if not fragment:
+                return
+            MainTabsActivity = find_class("org.telegram.ui.MainTabsActivity")
+            if not MainTabsActivity or not MainTabsActivity.getClass().isInstance(fragment):
+                return
+            account = fragment.getCurrentAccount()
+            filters = MessagesController.getInstance(account).getDialogFilters()
+            if not filters or filters.size() <= 1:
+                return
+            try:
+                items_count = options.getItemsCount()
+            except:
+                items_count = 0
+            if items_count < filters.size():
+                return
+            plugin = self
+            frag_ref = weakref.ref(fragment)
+            class RecentRunnable(dynamic_proxy(jclass("java.lang.Runnable"))):
+                def run(self_r):
+                    try:
+                        options.dismiss()
+                        frag = frag_ref()
+                        if frag:
+                            anchor = plugin._get_chats_tab_view(frag)
+                            if anchor is not None:
+                                plugin._recent_chats_popup_show(frag, anchor)
+                    except:
+                        pass
+            options.add(R_tg.drawable.msg_recent_solar, getString("recent_chats", "Recent Chats"), RecentRunnable())
+            try:
+                layout = options.getLinearLayout()
+                if layout and layout.getChildCount() > 0:
+                    last = layout.getChildAt(layout.getChildCount() - 1)
+                    layout.removeView(last)
+                    layout.addView(last, 0)
+            except:
+                pass
+        except Exception:
+            pass
+
+    def _get_chats_tab_view(self, activity):
+        try:
+            tabs_field = activity.getClass().getDeclaredField("tabs")
+            tabs_field.setAccessible(True)
+            tabs = tabs_field.get(activity)
+            if tabs is None:
+                return None
+            Array = jclass("java.lang.reflect.Array")
+            if Array.getLength(tabs) < 1:
+                return None
+            return Array.get(tabs, 0)
+        except:
+            return None
+
     def _recent_chats_popup_show(self, fragment, button):
         try:
             account = fragment.getCurrentAccount()
@@ -1700,12 +1758,27 @@ class UiTweaksPlugin(BasePlugin):
                     if not chats_tab:
                         return False
 
+                    try:
+                        listener_field = chats_tab.getClass().getMethod("getOnLongClickListener")
+                        original_listener = listener_field.invoke(chats_tab)
+                    except:
+                        original_listener = None
+
                     def on_long_click(v):
                         try:
-                            plugin._recent_chats_popup_show(activity, v)
+                            account = activity.getCurrentAccount()
+                            filters = MessagesController.getInstance(account).getDialogFilters()
+                            if not filters or filters.size() <= 1:
+                                plugin._recent_chats_popup_show(activity, v)
+                                return True
                         except Exception:
                             pass
-                        return True
+                        if original_listener:
+                            try:
+                                return bool(original_listener.onLongClick(v))
+                            except:
+                                pass
+                        return False
 
                     chats_tab.setOnLongClickListener(OnLongClickListener(on_long_click))
                     return True
@@ -1753,6 +1826,33 @@ class UiTweaksPlugin(BasePlugin):
                             pass
 
                 self.hook_recent_chats_popup_longclick_ref = self.hook_method(createView_method, MainTabsCreateViewHook(self))
+
+            if not self.hook_recent_chats_menu_inject_ref:
+                ItemOptionsClass = find_class("org.telegram.ui.Components.ItemOptions")
+                if ItemOptionsClass:
+                    try:
+                        show_method = ItemOptionsClass.getClass().getDeclaredMethod("show")
+                        show_method.setAccessible(True)
+
+                        class ItemOptionsShowHook:
+                            def __init__(self, plugin):
+                                self._plugin_ref = weakref.ref(plugin)
+
+                            def before_hooked_method(self, param):
+                                try:
+                                    plugin = self._plugin_ref()
+                                    if not plugin or not plugin.get_setting("recent_chats_fragment", False):
+                                        return
+                                    options = param.thisObject
+                                    if not options:
+                                        return
+                                    plugin._inject_recent_chats_menu_item(options)
+                                except Exception:
+                                    pass
+
+                        self.hook_recent_chats_menu_inject_ref = self.hook_method(show_method, ItemOptionsShowHook(self))
+                    except Exception:
+                        pass
 
             if not self.hook_recent_chats_fragment_activity_resume_refs:
                 self.hook_recent_chats_fragment_activity_resume_refs = []
@@ -3500,6 +3600,7 @@ class UiTweaksPlugin(BasePlugin):
             "hook_account_switcher_set_default_send_as_ref",
 
             "hook_recent_chats_popup_longclick_ref",
+            "hook_recent_chats_menu_inject_ref",
             "hook_recent_chats_fragment_activity_resume_refs",
 
             "lifecycle_hook_resume",
