@@ -908,7 +908,7 @@ class UiTweaksPlugin(BasePlugin):
         self.hook_soundpool_load_ref = None
         self.ios_sound_path = None
         
-        self.hook_in_message_translation_alert_ref = None
+
         
         self.hook_remove_from_folders_ref = None
         self._remove_from_folders_state = {}
@@ -919,8 +919,6 @@ class UiTweaksPlugin(BasePlugin):
         self._bookmark_fragment = None
         self._bookmark_delegate = None
         self._bookmark_menu_handle = None
-        self.hook_in_message_translation_revert_ref = None
-        self._in_message_translated = set()
         self.soundpool_instance = None
         self.ios_sound_id = None
         
@@ -2137,7 +2135,6 @@ class UiTweaksPlugin(BasePlugin):
             self.Quanta_switch("send_comments_after_forward", getString("send_comments_after_forward", "Send Comments After Forward"), False, lambda v: self._apply_hooks(), link_alias="send_comments_after_forward"),
             self.Quanta_switch("enable_no_quote_forward", getString("enable_no_quote_forward", "Enable No-Quote Forward"), False, lambda v: self._update_no_quote_forward_menu_item(), link_alias="enable_no_quote_forward"),
             Selector(key="swipe_action", text=getString("swipe_action", "Message Swipe Action"), default=0, items=[getString("swipe_reply", "Reply"), getString("swipe_save", "Save"), getString("swipe_translate", "Translate"), getString("swipe_direct_share", "Direct Share")]),
-            Selector(key="manual_translation_behavior", text=getString("manual_translation_behavior", "Manual Translation Behavior"), default=0, items=[getString("translation_popup", "Popup"), getString("translation_in_message", "In Message")], on_change=lambda v: self._apply_hooks()),
             self.Quanta_switch("enable_edit_file_name", getString("enable_edit_file_name", "Edit File Name"), False, lambda v: self._apply_hooks(), link_alias="enable_edit_file_name"),
             self.Quanta_switch("enable_delete_with_duration", getString("enable_delete_with_duration", "Delete with Duration Selection"), False, lambda v: self._apply_delete_with_duration_hooks(), link_alias="enable_delete_with_duration"),
             Divider(text=getString("delete_with_duration_info", "Adds duration selection when banning/restricting users after deleting their messages.")) if self.get_setting("enable_delete_with_duration", False) else None,
@@ -3335,8 +3332,6 @@ class UiTweaksPlugin(BasePlugin):
         if hasattr(self, '_class_cache'):
             self._class_cache.clear()
         
-        if hasattr(self, '_in_message_translated'):
-            self._in_message_translated.clear()
         
         global uitweaks_plugin_instance
         uitweaks_plugin_instance = None
@@ -3541,8 +3536,6 @@ class UiTweaksPlugin(BasePlugin):
             "hook_unify_username_behavior_bind_ref",
             "hook_edit_file_name_ref",
             "hook_send_comments_after_forward_ref",
-            "hook_in_message_translation_alert_ref",
-            "hook_in_message_translation_revert_ref",
             "hook_hide_via_bot_ref",
             "hook_remove_from_folders_ref",
             "hook_bookmark_create_view_ref",
@@ -3767,8 +3760,6 @@ class UiTweaksPlugin(BasePlugin):
             if self.get_setting("hide_via_bot", False):
                 self._hook_hide_via_bot()
 
-            if self.get_setting("manual_translation_behavior", 0) == 1:
-                self._hook_in_message_translation()
 
             if self.get_setting("remove_from_folders_on_leave", False):
                 self._hook_remove_from_folders()
@@ -5816,108 +5807,6 @@ class UiTweaksPlugin(BasePlugin):
             chat_activity.getFragmentView().requestLayout()
             
         except Exception as e:
-            pass
-    
-    def _hook_in_message_translation(self):
-        try:
-            if self.hook_in_message_translation_alert_ref:
-                return
-            
-            TranslateAlert2 = jclass("org.telegram.ui.Components.TranslateAlert2")
-            ChatActivityClass = self._get_class("org.telegram.ui.ChatActivity")
-            TranslatorUtils = jclass("com.exteragram.messenger.translator.TranslatorUtils")
-            ChatUtils = jclass("com.exteragram.messenger.utils.chats.ChatUtils")
-            ChatMessageCell = jclass("org.telegram.ui.Cells.ChatMessageCell")
-            
-            plugin = self
-            
-            class InMessageTranslationCallback(dynamic_proxy(find_class("com.exteragram.messenger.translator.TranslatorUtils$TranslateCallback"))):
-                def __init__(cb, msg, lang, activity):
-                    super().__init__()
-                    cb.msg, cb.lang, cb.activity = msg, lang, activity
-                
-                def onSuccess(cb, *a):
-                    try:
-                        txt, ent = (a[0], None) if len(a) == 1 and isinstance(a[0], str) else \
-                                   (a[0].result.get(0).text, a[0].result.get(0).entities) if len(a) == 2 and a[0] and not a[1] and a[0].result and not a[0].result.isEmpty() else (None, None)
-                        if txt: cb._apply(txt, ent)
-                    except: pass
-                
-                def onFailed(cb): pass
-                def onReqId(cb, _): pass
-                
-                def _apply(cb, txt, ent):
-                    try:
-                        mo = cb.msg.messageOwner
-                        if not mo: return
-                        te = TLRPC.TL_textWithEntities()
-                        te.text, te.entities = txt, ent if ent else jclass("java.util.ArrayList")()
-                        mo.translatedText, mo.translatedToLanguage = te, cb.lang
-                        plugin._in_message_translated.add((cb.msg.getDialogId(), cb.msg.getId()))
-                        def ui():
-                            try:
-                                cb.msg.translated = True
-                                cb.msg.applyNewText(txt)
-                                cb.msg.generateCaption()
-                                if cb.activity:
-                                    lv = get_private_field(cb.activity, "chatListView")
-                                    if lv:
-                                        for i in range(lv.getChildCount()):
-                                            c = lv.getChildAt(i)
-                                            if isinstance(c, ChatMessageCell) and c.getMessageObject() and c.getMessageObject().getId() == cb.msg.getId():
-                                                c.invalidate(); break
-                            except: pass
-                        run_on_ui_thread(ui)
-                    except: pass
-            
-            class InMessageAlertHook(MethodHook):
-                def __init__(h): h.pending = None
-                
-                def before_hooked_method(h, p):
-                    try:
-                        if len(p.args) < 7: return
-                        f = p.args[1]
-                        if not f or not isinstance(f, ChatActivityClass): return
-                        obj = get_private_field(f, "selectedObject")
-                        if not obj:
-                            try:
-                                fld = f.getClass().getDeclaredField("selectedObject")
-                                fld.setAccessible(True)
-                                obj = fld.get(f)
-                            except: pass
-                        if not obj: return
-                        txt = next((a for a in p.args if a and hasattr(a, '__class__') and ('String' in a.__class__.__name__ or 'CharSequence' in a.__class__.__name__ or isinstance(a, str)) and len(str(a)) > 5), None)
-                        if not txt:
-                            txt = ChatUtils.getInstance().getMessageText(obj, None)
-                        if not txt or not len(str(txt)): return
-                        try:
-                            src_lang = TranslatorUtils.getDetectedLanguage(obj)
-                        except:
-                            src_lang = None
-                        TranslatorUtils.translate(txt, src_lang, TranslateAlert2.getToLanguage(), InMessageTranslationCallback(obj, TranslateAlert2.getToLanguage(), f))
-                        h.pending = True
-                    except: pass
-                
-                def after_hooked_method(h, p):
-                    try:
-                        if h.pending:
-                            a = p.getResult()
-                            if a: a.dismiss()
-                            h.pending = None
-                    except: pass
-            
-            class InMessageBlockRevertHook(MethodHook):
-                def before_hooked_method(h, p):
-                    try:
-                        m = p.thisObject
-                        if m and (m.getDialogId(), m.getId()) in plugin._in_message_translated and m.translated and m.messageOwner and m.messageOwner.translatedText:
-                            p.setResult(False)
-                    except: pass
-            
-            self.hook_in_message_translation_alert_ref = self.hook_all_methods(TranslateAlert2, "showAlert", InMessageAlertHook())
-            self.hook_in_message_translation_revert_ref = self.hook_all_methods(MessageObject, "updateTranslation", InMessageBlockRevertHook())
-            
-        except Exception:
             pass
     
     def _hook_remove_https_from_links(self):
