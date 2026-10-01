@@ -800,7 +800,6 @@ class UiTweaksPlugin(BasePlugin):
         self.hook_article_viewer_ref = None
         self.hook_webapp_swipe_prevention_ref = None
         self.hook_download_manager_ref = None
-        self.hook_proxy_button_ref = None
         self.current_popup = None
         self._cached_accounts = None
         self.hook_phone_number_ref = None
@@ -2063,7 +2062,6 @@ class UiTweaksPlugin(BasePlugin):
         settings.extend([
             Header(text=getString("action_bar", "Action Bar")),
             self.Quanta_switch("always_show_download_manager", getString("always_show_download_manager", "Always Show Download Manager"), False, lambda v: self._apply_hooks(), link_alias="always_show_download_manager"),
-            self.Quanta_switch("always_show_proxy_button", getString("always_show_proxy_button", "Always Show Proxy Button"), False, lambda v: self._apply_hooks(), link_alias="always_show_proxy_button"),
             Divider(text=getString("menu_visibility_info", "This will force the buttons to always show in the action bar.")),
         ])
         
@@ -3471,7 +3469,6 @@ class UiTweaksPlugin(BasePlugin):
             "hook_article_viewer_ref",
             "hook_webapp_swipe_prevention_ref",
             "hook_download_manager_ref",
-            "hook_proxy_button_ref",
             "hook_phone_number_ref",
             "hook_update_bot_button_ref",
             "hook_voice_message_control_ref",
@@ -3637,8 +3634,6 @@ class UiTweaksPlugin(BasePlugin):
                 self._remove_star_reaction_hooks()
             if self.get_setting("always_show_download_manager", False):
                 self._hook_download_manager()
-            if self.get_setting("always_show_proxy_button", False):
-                self._hook_proxy_button()
             if self.get_setting("hide_phone_number", False):
                 self._hook_phone_number()
             if self.get_setting("enable_goto_message", False):
@@ -7032,19 +7027,6 @@ class UiTweaksPlugin(BasePlugin):
         except Exception as e:
             pass
 
-    def _hook_proxy_button(self):
-        try:
-            from java import jclass
-            cls = jclass("org.telegram.ui.DialogsActivity")
-            method = self._get_declared_method(cls.getClass(), "updateProxyButton", jclass("java.lang.Boolean").TYPE, jclass("java.lang.Boolean").TYPE)
-            if method is None:
-                return
-            ref = self.hook_method(method, ProxyButtonHook(self))
-            self.hook_proxy_button_ref = ref
-            pass
-        except Exception as e:
-            pass
-
     def _hook_star_reaction_menu(self):
         try:
             reaction_menu_class = self._get_class("org.telegram.ui.Components.ReactionsContainerLayout")
@@ -10371,36 +10353,6 @@ class DownloadManagerHook:
             plugin = self._plugin_ref()
             if plugin and plugin.get_setting("always_show_download_manager", False):
                 param.setResult(True)
-        except Exception as e:
-            pass
-
-class ProxyButtonHook:
-    def __init__(self, plugin: UiTweaksPlugin):
-        self._plugin_ref = weakref.ref(plugin)
-
-    @hook_filters(HookFilter.Condition("param.thisObject != null"))
-    def after_hooked_method(self, param):
-        try:
-            plugin = self._plugin_ref()
-            if not plugin or not plugin.get_setting("always_show_proxy_button", False):
-                return
-            
-            dialogs_activity = param.thisObject
-            
-            try:
-                proxy_item_field = _ut_get_declared_field(dialogs_activity, "proxyItem")
-                proxy_item = proxy_item_field.get(dialogs_activity) if proxy_item_field is not None else None
-                
-                if proxy_item is not None:
-                    proxy_item.setVisibility(0)
-                    
-                    proxy_visible_field = _ut_get_declared_field(dialogs_activity, "proxyItemVisible")
-                    if proxy_visible_field is not None:
-                        proxy_visible_field.set(dialogs_activity, True)
-                    
-            except Exception as e:
-                pass
-                
         except Exception as e:
             pass
 
