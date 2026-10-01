@@ -1563,6 +1563,8 @@ class UiTweaksPlugin(BasePlugin):
 
     def _inject_recent_chats_menu_item(self, options):
         try:
+            if getattr(self, "_showing_recent_chats_popup", False):
+                return
             fragment = get_private_field(options, "fragment")
             if not fragment:
                 return
@@ -1669,7 +1671,11 @@ class UiTweaksPlugin(BasePlugin):
             else:
                 options.setScrimViewBackground(Theme.createCircleDrawable(AndroidUtilities.dp(40), Theme.getColor(Theme.key_windowBackgroundWhite)))
 
-            options.show()
+            self._showing_recent_chats_popup = True
+            try:
+                options.show()
+            finally:
+                self._showing_recent_chats_popup = False
         except Exception:
             pass
 
