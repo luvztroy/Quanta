@@ -384,7 +384,7 @@ class NonClickablePreviewPresentFragmentHook:
 
 class UnreadCountHook:
     def __init__(self, plugin_instance):
-        super().__init__(plugin_instance)
+        self.plugin = plugin_instance
     
     @hook_filters(HookFilter.Condition("param.thisObject != null"))
     def after_hooked_method(self, param):
@@ -394,8 +394,6 @@ class UnreadCountHook:
             exclude_archived = self.plugin.get_setting("exclude_archived_from_count", False)
             process_counts = show_message_count or show_chat_count
 
-            exclude_archived = self.plugin.get_setting("exclude_archived_from_count", False)
-            process_counts = show_message_count or show_chat_count
 
             if not (process_counts or exclude_archived):
                 return
@@ -4627,7 +4625,7 @@ class UiTweaksPlugin(BasePlugin):
             
             class OpenForwardHook:
                 def __init__(hook_self):
-                    super().__init__(plugin_ref)
+                    hook_self.plugin = plugin_ref
                 
                 @hook_filters(HookFilter.Condition("param.thisObject != null"))
                 def before_hooked_method(hook_self, param):
@@ -4664,7 +4662,7 @@ class UiTweaksPlugin(BasePlugin):
             
             class AddToSelectedMessagesHook:
                 def __init__(hook_self):
-                    super().__init__(plugin_ref)
+                    hook_self.plugin = plugin_ref
                 
                 @hook_filters(HookFilter.ArgumentNotNull(0))
                 def before_hooked_method(hook_self, param):
@@ -4784,7 +4782,10 @@ class UiTweaksPlugin(BasePlugin):
                 return
 
             BooleanTYPE = self._get_class("java.lang.Boolean").TYPE
-            calcUnreadCountersMethod = MessagesStorageClass.getClass().getDeclaredMethod("calcUnreadCounters", BooleanTYPE)
+            try:
+                calcUnreadCountersMethod = MessagesStorageClass.getClass().getDeclaredMethod("calcUnreadCounters", BooleanTYPE)
+            except Exception as e:
+                return
             calcUnreadCountersMethod.setAccessible(True)
 
             self.hook_unread_count_ref = self.hook_method(calcUnreadCountersMethod, UnreadCountHook(self), priority=0)
@@ -8690,7 +8691,7 @@ class UiTweaksPlugin(BasePlugin):
             
             class DisableTopicSwipeHook:
                 def __init__(self, plugin_instance):
-                    super().__init__(plugin_instance)
+                    self.plugin = plugin_instance
                 
                 @hook_filters(HookFilter.Condition("param.thisObject != null"))
                 def before_hooked_method(self, param):
