@@ -8163,14 +8163,26 @@ class UiTweaksPlugin(BasePlugin):
             if not SenderSelectPopupClass:
                 return
 
-            constructor = SenderSelectPopupClass.getClass().getDeclaredConstructor(
-                jclass("android.content.Context"),
-                jclass("org.telegram.ui.ChatActivity"),
-                jclass("org.telegram.messenger.MessagesController"),
-                jclass("org.telegram.tgnet.TLRPC$ChatFull"),
-                jclass("org.telegram.tgnet.TLRPC$TL_channels_sendAsPeers"),
-                jclass("org.telegram.ui.Components.SenderSelectPopup$OnSelectCallback")
-            )
+            try:
+                constructor = SenderSelectPopupClass.getClass().getDeclaredConstructor(
+                    jclass("android.content.Context"),
+                    jclass("org.telegram.ui.ChatActivity"),
+                    jclass("org.telegram.messenger.MessagesController"),
+                    jclass("java.lang.Boolean").TYPE,
+                    jclass("org.telegram.tgnet.TLRPC$Peer"),
+                    jclass("org.telegram.tgnet.TLRPC$TL_channels_sendAsPeers"),
+                    jclass("org.telegram.ui.Components.SenderSelectPopup$OnSelectCallback"),
+                    jclass("org.telegram.ui.ActionBar.Theme$ResourcesProvider")
+                )
+            except:
+                constructor = SenderSelectPopupClass.getClass().getDeclaredConstructor(
+                    jclass("android.content.Context"),
+                    jclass("org.telegram.ui.ChatActivity"),
+                    jclass("org.telegram.messenger.MessagesController"),
+                    jclass("org.telegram.tgnet.TLRPC$ChatFull"),
+                    jclass("org.telegram.tgnet.TLRPC$TL_channels_sendAsPeers"),
+                    jclass("org.telegram.ui.Components.SenderSelectPopup$OnSelectCallback")
+                )
             constructor.setAccessible(True)
             self.hook_method(constructor, SendAsPopupHook(self))
 
@@ -9505,16 +9517,27 @@ class SendAsPopupHook:
     def __init__(self, plugin):
         self._plugin_ref = weakref.ref(plugin)
 
-    @hook_filters(HookFilter.ArgumentNotNull(3), HookFilter.ArgumentNotNull(4))
     def after_hooked_method(self, param):
         try:
-            send_as_peers, chat_full = param.args[4], param.args[3]
-            if not send_as_peers or not chat_full:
+            args = param.args
+            send_as_peers = None
+            dialog_id = 0
+            for i, a in enumerate(args):
+                if a is None:
+                    continue
+                cn = a.getClass().getName() if hasattr(a, 'getClass') else ''
+                if 'TL_channels_sendAsPeers' in cn:
+                    send_as_peers = a
+                elif 'ChatActivity' in cn:
+                    try:
+                        dialog_id = a.getDialogId()
+                    except:
+                        pass
+            if not send_as_peers or not dialog_id:
                 return
 
-            chat_id = chat_full.id
             current_account = UserConfig.selectedAccount
-            chat = MessagesController.getInstance(current_account).getChat(chat_id)
+            chat = MessagesController.getInstance(current_account).getChat(-dialog_id)
             
             if not chat or not ChatObject.isMegagroup(chat) or not chat.creator:
                 return
