@@ -50,7 +50,6 @@ from org.telegram.ui.ActionBar import ActionBarPopupWindow, Theme, ActionBarMenu
 from org.telegram.ui.Components import AvatarDrawable, BackupImageView, LayoutHelper, UItem, AnimatedEmojiSpan
 from org.telegram.ui import ChatActivity, ProfileActivity, TopicsFragment, DialogsActivity, LaunchActivity
 from org.telegram.ui.ActionBar import BaseFragment
-from com.google.android.exoplayer2.util import Consumer
 
 from file_utils import get_cache_dir, ensure_dir_exists
 
@@ -3017,17 +3016,31 @@ class UiTweaksPlugin(BasePlugin):
                 
                 def resolve_channel():
                     from java import dynamic_proxy, jclass
-                    Consumer = jclass("com.google.android.exoplayer2.util.Consumer")
                     
-                    class ResolveCallback(dynamic_proxy(Consumer)):
-                        def accept(self_cb, peer_id):
-                            if peer_id and peer_id < 0:
-                                run_on_ui_thread(lambda: on_channel_resolved(messages_controller.getChat(-peer_id)))
-                            else:
-                                self.checking_update = False
+                    def on_resolved(peer_id):
+                        if peer_id and peer_id < 0:
+                            run_on_ui_thread(lambda: on_channel_resolved(messages_controller.getChat(-peer_id)))
+                        else:
+                            self.checking_update = False
                     
                     messages_controller = account.getMessagesController()
-                    messages_controller.getUserNameResolver().resolve(CHANNEL_USERNAME, ResolveCallback())
+                    resolver = messages_controller.getUserNameResolver()
+                    try:
+                        Callback = jclass("org.telegram.messenger.Utilities$Callback")
+                    
+                        class ResolveCallback(dynamic_proxy(Callback)):
+                            def run(self_cb, peer_id):
+                                on_resolved(peer_id)
+                    
+                        resolver.resolve(CHANNEL_USERNAME, ResolveCallback())
+                    except Exception:
+                        Consumer = jclass("androidx.media3.common.util.Consumer")
+                    
+                        class ResolveCallback(dynamic_proxy(Consumer)):
+                            def accept(self_cb, peer_id):
+                                on_resolved(peer_id)
+                    
+                        resolver.resolve(CHANNEL_USERNAME, ResolveCallback())
                 
                 run_on_ui_thread(resolve_channel)
                 
@@ -5789,13 +5802,13 @@ class UiTweaksPlugin(BasePlugin):
             
             TranslateAlert2 = jclass("org.telegram.ui.Components.TranslateAlert2")
             ChatActivityClass = self._get_class("org.telegram.ui.ChatActivity")
-            TranslatorUtils = jclass("com.exteragram.messenger.utils.text.TranslatorUtils")
-            ChatUtils = jclass("com.exteragram.messenger.utils.ChatUtils")
+            TranslatorUtils = jclass("com.exteragram.messenger.translator.TranslatorUtils")
+            ChatUtils = jclass("com.exteragram.messenger.utils.chats.ChatUtils")
             ChatMessageCell = jclass("org.telegram.ui.Cells.ChatMessageCell")
             
             plugin = self
             
-            class InMessageTranslationCallback(dynamic_proxy(find_class("com.exteragram.messenger.utils.text.TranslatorUtils$TranslateCallback"))):
+            class InMessageTranslationCallback(dynamic_proxy(find_class("com.exteragram.messenger.translator.TranslatorUtils$TranslateCallback"))):
                 def __init__(cb, msg, lang, activity):
                     super().__init__()
                     cb.msg, cb.lang, cb.activity = msg, lang, activity
@@ -5854,7 +5867,11 @@ class UiTweaksPlugin(BasePlugin):
                         if not txt:
                             txt = ChatUtils.getInstance().getMessageText(obj, None)
                         if not txt or not len(str(txt)): return
-                        TranslatorUtils.translate(txt, TranslateAlert2.getToLanguage(), InMessageTranslationCallback(obj, TranslateAlert2.getToLanguage(), f))
+                        try:
+                            src_lang = TranslatorUtils.getDetectedLanguage(obj)
+                        except:
+                            src_lang = None
+                        TranslatorUtils.translate(txt, src_lang, TranslateAlert2.getToLanguage(), InMessageTranslationCallback(obj, TranslateAlert2.getToLanguage(), f))
                         h.pending = True
                     except: pass
                 
@@ -11929,7 +11946,7 @@ class ChatActionBarMenuItemClickHook:
                         chatActivityEnterView.getEditField().setSelection(chatActivityEnterView.getEditText().length())
                         chatActivityEnterView.openKeyboard()
             
-            find_class("com.exteragram.messenger.ai.ui.ResponseAlert").showAlert(
+            find_class("com.exteragram.messenger.ai.ui.AiResponseAlert").showAlert(
                 chat_activity,
                 client,
                 full_prompt,
