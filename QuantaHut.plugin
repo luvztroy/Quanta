@@ -42,10 +42,10 @@ __description__ = "Library for Quanta plugins"
 __icon__ = "luvztroyIcons/14"
 __id__ = "quantahut"
 __type__ = "plugin"
-__version__ = "1.5.3.10-Beta"
+__version__ = "1.5.4-Beta"
 __author__ = "@luvztroy"
-__beta__ = "True"
-__min_version__ = "12.3.1"
+__beta__ = "False"
+__min_version__ = "12.9.0"
 __priority__ = 1
 __requirements__ = "cachetools"
 
